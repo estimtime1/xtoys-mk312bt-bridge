@@ -9,6 +9,8 @@ It works by **listening to the audio** XToys produces and turning it into serial
 commands for the box. No audio is ever fed into the box itself; it's pure Link
 control, the same as the standalone MK-312BT Control app.
 
+![XToys → MK-312BT Bridge](images/xtoys-bridge.png)
+
 ```
 XToys (in your browser)
    │  plays stereo audio  (loudness = intensity, tone pitch = frequency)
