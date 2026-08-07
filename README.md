@@ -9,6 +9,14 @@ It works by **listening to the audio** XToys produces and turning it into serial
 commands for the box. No audio is ever fed into the box itself; it's pure Link
 control, the same as the standalone MK-312BT Control app.
 
+> **🆕 There's a newer app: [312 Studio](https://github.com/estimtime1/312-studio).**
+> It combines this bridge (as its **External** mode) and the standalone
+> [MK-312BT Control](https://github.com/estimtime1/mk312bt-control) app (as its
+> **Local** mode) into one program with a mode switch and a modern UI. It also adds
+> an adjustable **Smoothing** control so XToys power increases ramp up instead of
+> jumping. This bridge still works and is kept here, but new users should start
+> with 312 Studio.
+
 ![XToys → MK-312BT Bridge](images/xtoys-bridge.png)
 
 ```
