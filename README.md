@@ -193,12 +193,12 @@ Run from source with `python xtoys_bridge.py`. Files:
 
 - `xtoys_bridge.py` — the app: a background **Analyzer** thread (WASAPI loopback
   capture → per-channel RMS for intensity, FFT peak for tone frequency) feeding an
-  output engine that drives the box with dithered level writes + throttled,
+  output engine that drives the box with smoothed level writes + throttled,
   pinned frequency.
 - `mk312.py` — the MK-312BT / ET-312B serial driver (shared with the standalone
   MK-312BT Control app).
 
 **Latency:** the audio window (~10 ms) plus buffering (~10 ms) is the only
-inherent delay (~20 ms), then ~4 ms of serial. Level is streamed via a ~50 Hz
-dither loop for sub-step smoothness; frequency writes are throttled because each
-one is several serial writes and the box's frequency is coarse anyway.
+inherent delay (~20 ms), then ~4 ms of serial. Intensity is smoothed (a short EMA)
+so a steady input holds a steady level; frequency writes are throttled because
+each one is several serial writes and the box's frequency is coarse anyway.

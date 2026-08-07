@@ -30,10 +30,11 @@ from mk312 import MK312, MK312Error, FREQ_MIN, FREQ_MAX, FREQ_HZ_K, freq_value_t
 DEFAULT_PORT = "COM3"
 RATE = 48000
 BLOCK = 512              # ~10.7 ms analysis window
-DITHER_MS = 20          # level write / dither (~50 Hz)
+OUTPUT_MS = 20          # level write rate (~50 Hz)
 FREQ_MS = 120           # frequency write cadence (writes are costly)
 GUI_MS = 120            # readout refresh
 RMS_FULL = 0.707        # RMS of a full-scale sine = 100% intensity
+SMOOTH = 0.15           # intensity EMA (~60 ms) to kill RMS ripple -> steady hold
 WIDTH_SOLID = 160
 MODE_WAVES = 0x76
 INT_GATE = 0.02         # below this intensity, hold frequency (no clean tone)
@@ -82,8 +83,10 @@ class Analyzer(threading.Thread):
                 while self.running:
                     data = rec.record(numframes=BLOCK)
                     left, right = data[:, 0], data[:, 1]
-                    self.int_a = min(1.0, rms(left) / RMS_FULL * self.gain)
-                    self.int_b = min(1.0, rms(right) / RMS_FULL * self.gain)
+                    raw_a = min(1.0, rms(left) / RMS_FULL * self.gain)
+                    raw_b = min(1.0, rms(right) / RMS_FULL * self.gain)
+                    self.int_a += SMOOTH * (raw_a - self.int_a)   # EMA smoothing
+                    self.int_b += SMOOTH * (raw_b - self.int_b)
                     ha, hb = dominant_hz(left, RATE), dominant_hz(right, RATE)
                     if ha > 0:
                         self.hz_a = ha
@@ -102,10 +105,8 @@ class Bridge:
         self.root = root
         self.box = None
         self.analyzer = None
-        # dithered output state (same engine as the main tester)
-        self.target_a = self.target_b = 0.0
-        self._dith_a = self._dith_b = 0.0
-        self._last_wa = self._last_wb = -1
+        self.target_a = self.target_b = 0.0        # desired level (float register)
+        self._last_wa = self._last_wb = -1         # last written level (write-on-change)
         self._last_freg_a = self._last_freg_b = None
         self.key_queue = queue.Queue()
         root.title("XToys → MK-312BT Bridge")
@@ -120,7 +121,7 @@ class Bridge:
             root.bind("<Escape>", lambda _e: self.panic())
         self._build()
         self._set_connected(False)
-        self.dither_tick()
+        self.output_tick()
         self.freq_tick()
         self.gui_tick()
 
@@ -272,30 +273,22 @@ class Bridge:
         self.disconnect()
         messagebox.showerror("Link lost", str(exc))
 
-    @staticmethod
-    def _dither_step(target, acc):
-        base = int(target)
-        acc += target - base
-        if acc >= 1.0 and base < 255:
-            return acc - 1.0, base + 1
-        return acc, base
-
-    def dither_tick(self):
-        # pull latest intensity, cap by Maximum, dither the two channels to the box
+    def output_tick(self):
+        # pull latest intensity, cap by Maximum, write the two channels' levels
         if self.box and self.box.connected and self.analyzer:
             if self.analyzer.error:
                 err = self.analyzer.error
                 self.disconnect()
                 messagebox.showerror("Audio capture failed", err)
-                self.root.after(DITHER_MS, self.dither_tick)
+                self.root.after(OUTPUT_MS, self.output_tick)
                 return
             self.analyzer.gain = max(0.1, self._safe(self.gain_var, 1.0))
             la = min(self.analyzer.int_a * 100.0, self.max_a_var.get())
             lb = min(self.analyzer.int_b * 100.0, self.max_b_var.get())
             self.target_a = la * 2.55
             self.target_b = lb * 2.55
-            self._dith_a, va = self._dither_step(self.target_a, self._dith_a)
-            self._dith_b, vb = self._dither_step(self.target_b, self._dith_b)
+            va = round(self.target_a)     # steady hold: rounded level, held (no toggling)
+            vb = round(self.target_b)
             try:
                 if va != self._last_wa:
                     self.box.set_level_a(va)
@@ -306,7 +299,7 @@ class Bridge:
             except Exception as exc:
                 self._fail(exc)
                 return
-        self.root.after(DITHER_MS, self.dither_tick)
+        self.root.after(OUTPUT_MS, self.output_tick)
 
     def _map_freq(self, xt_hz):
         if xt_hz <= 0:
